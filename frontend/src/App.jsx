@@ -8,6 +8,13 @@ import CMSDashboard from './pages/CMSDashboard'
 import NotFoundPage from './pages/NotFoundPage'
 import { lazy, Suspense } from 'react'
 
+const CMSContent       = lazy(() => import('./pages/cms/CMSContent'))
+const CMSMedia         = lazy(() => import('./pages/cms/CMSMedia'))
+const CMSAnnouncements = lazy(() => import('./pages/cms/CMSAnnouncements'))
+const CMSUsers         = lazy(() => import('./pages/cms/CMSUsers'))
+const CMSAnalytics     = lazy(() => import('./pages/cms/CMSAnalytics'))
+const CMSSettings      = lazy(() => import('./pages/cms/CMSSettings'))
+
 const MediaPage        = lazy(() => import('./pages/MediaPage'))
 const PublicationsPage = lazy(() => import('./pages/PublicationsPage'))
 const CareersPage      = lazy(() => import('./pages/CareersPage'))
@@ -25,8 +32,14 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/cms/login"     element={<CMSLogin />} />
-        <Route path="/cms/dashboard" element={<CMSDashboard />} />
+        <Route path="/cms/login"         element={<CMSLogin />} />
+        <Route path="/cms/dashboard"     element={<CMSDashboard />} />
+        <Route path="/cms/content"       element={<Suspense fallback={<PageLoader />}><CMSContent /></Suspense>} />
+        <Route path="/cms/media"         element={<Suspense fallback={<PageLoader />}><CMSMedia /></Suspense>} />
+        <Route path="/cms/announcements" element={<Suspense fallback={<PageLoader />}><CMSAnnouncements /></Suspense>} />
+        <Route path="/cms/users"         element={<Suspense fallback={<PageLoader />}><CMSUsers /></Suspense>} />
+        <Route path="/cms/analytics"     element={<Suspense fallback={<PageLoader />}><CMSAnalytics /></Suspense>} />
+        <Route path="/cms/settings"      element={<Suspense fallback={<PageLoader />}><CMSSettings /></Suspense>} />
         <Route element={<Layout />}>
           <Route path="/"           element={<HomePage />} />
           <Route path="/about"      element={<AboutPage />} />
