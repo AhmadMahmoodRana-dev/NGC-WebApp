@@ -1,80 +1,124 @@
-import { useState } from 'react'
-import {
-  Upload, Search, Image, Film, FileText, Folder,
-  Download, Trash2, Eye, Grid, List, PlusCircle,
-} from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { Upload, Search, Image, Film, FileText, Folder, Download, Trash2, Eye, Grid, List, Loader2, AlertCircle, RefreshCw } from 'lucide-react'
 import CMSLayout from '../../components/cms/CMSLayout'
-
-const MEDIA_ITEMS = [
-  { id: 1,  name: '500kv-corridor-aerial.jpg',      type: 'image', size: '3.4 MB', date: '17 Mar 2026', folder: 'Photos',    thumb: '#1A56A5', dims: '4000×2667' },
-  { id: 2,  name: 'tarbela-dam-station.jpg',         type: 'image', size: '2.1 MB', date: '15 Mar 2026', folder: 'Photos',    thumb: '#0B1E3E', dims: '3200×2133' },
-  { id: 3,  name: 'annual-report-2024-25.pdf',       type: 'pdf',   size: '8.9 MB', date: '14 Mar 2026', folder: 'Documents', thumb: null,      dims: '42 pages'  },
-  { id: 4,  name: 'grid-expansion-video.mp4',        type: 'video', size: '45.2 MB',date: '12 Mar 2026', folder: 'Videos',    thumb: '#C8922A', dims: '1920×1080' },
-  { id: 5,  name: 'ceo-message-march.jpg',           type: 'image', size: '1.8 MB', date: '10 Mar 2026', folder: 'Photos',    thumb: '#122952', dims: '2400×1600' },
-  { id: 6,  name: 'mou-ceremony-photos.zip',         type: 'archive',size:'18.7 MB',date: '08 Mar 2026', folder: 'Photos',    thumb: null,      dims: '14 files'  },
-  { id: 7,  name: 'procurement-policy-2026.pdf',     type: 'pdf',   size: '1.2 MB', date: '05 Mar 2026', folder: 'Documents', thumb: null,      dims: '18 pages'  },
-  { id: 8,  name: 'smart-grid-faisalabad.jpg',       type: 'image', size: '2.7 MB', date: '02 Mar 2026', folder: 'Photos',    thumb: '#2E87D4', dims: '3600×2400' },
-  { id: 9,  name: 'infographic-national-grid.png',   type: 'image', size: '890 KB', date: '28 Feb 2026', folder: 'Graphics',  thumb: '#F0B849', dims: '1200×800'  },
-  { id: 10, name: 'load-dispatch-presentation.pptx', type: 'doc',   size: '4.3 MB', date: '25 Feb 2026', folder: 'Documents', thumb: null,      dims: '28 slides' },
-  { id: 11, name: 'transmission-towers-dusk.jpg',    type: 'image', size: '3.1 MB', date: '22 Feb 2026', folder: 'Photos',    thumb: '#5A6070', dims: '4000×2667' },
-  { id: 12, name: 'employee-town-hall-clip.mp4',     type: 'video', size: '31.0 MB',date: '18 Feb 2026', folder: 'Videos',    thumb: '#1A56A5', dims: '1280×720'  },
-]
-
-const FOLDERS = ['All Files', 'Photos', 'Videos', 'Documents', 'Graphics']
+import { mediaAPI } from '../../utils/api'
 
 const TYPE_ICONS = {
-  image:   { icon: Image,    color: 'text-blue-500',   bg: 'bg-blue-50'   },
+  photo:   { icon: Image,    color: 'text-blue-500',   bg: 'bg-blue-50'   },
   video:   { icon: Film,     color: 'text-purple-500', bg: 'bg-purple-50' },
-  pdf:     { icon: FileText, color: 'text-red-400',    bg: 'bg-red-50'    },
-  doc:     { icon: FileText, color: 'text-amber-500',  bg: 'bg-amber-50'  },
-  archive: { icon: Folder,   color: 'text-gray-500',   bg: 'bg-gray-100'  },
+  document:{ icon: FileText, color: 'text-red-400',    bg: 'bg-red-50'    },
+  other:   { icon: Folder,   color: 'text-gray-500',   bg: 'bg-gray-100'  },
 }
 
 export default function CMSMedia() {
+  const [items, setItems]       = useState([])
+  const [categories, setCats]   = useState([])
+  const [total, setTotal]       = useState(0)
+  const [loading, setLoading]   = useState(true)
+  const [error, setError]       = useState('')
   const [search, setSearch]     = useState('')
-  const [folder, setFolder]     = useState('All Files')
+  const [typeFilter, setType]   = useState('')
+  const [catFilter, setCat]     = useState('')
   const [view, setView]         = useState('grid')
-  const [selected, setSelected] = useState([])
+  const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState('')
 
-  const filtered = MEDIA_ITEMS.filter(m => {
-    const matchSearch = m.name.toLowerCase().includes(search.toLowerCase())
-    const matchFolder = folder === 'All Files' || m.folder === folder
-    return matchSearch && matchFolder
-  })
+  const load = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const params = { limit: 24 }
+      if (typeFilter) params.type = typeFilter
+      if (catFilter)  params.category = catFilter
+      if (search)     params.search = search
+      const data = await mediaAPI.getAll(params)
+      setItems(data.data)
+      setTotal(data.total)
+      if (data.categories) setCats(['All', ...data.categories])
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }, [typeFilter, catFilter, search])
 
-  const toggleSelect = (id) =>
-    setSelected(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id])
+  useEffect(() => { load() }, [load])
 
-  const totalSize = filtered.reduce((acc, m) => {
-    const n = parseFloat(m.size)
-    return acc + (m.size.includes('KB') ? n / 1024 : n)
-  }, 0)
+  const handleDelete = async (id) => {
+    if (!confirm('Delete this media item?')) return
+    try {
+      await mediaAPI.delete(id)
+      setItems(prev => prev.filter(m => m.id !== id))
+    } catch (err) { alert(err.message) }
+  }
+
+  const handleUpload = async (e) => {
+    const files = Array.from(e.target.files)
+    if (!files.length) return
+    setUploading(true)
+    setUploadProgress(`Uploading ${files.length} file(s)…`)
+    try {
+      for (const file of files) {
+        const fd = new FormData()
+        fd.append('file', file)
+        fd.append('category', 'General')
+        await mediaAPI.upload(fd)
+      }
+      setUploadProgress('Upload complete!')
+      setTimeout(() => setUploadProgress(''), 2000)
+      load()
+    } catch (err) {
+      setUploadProgress('')
+      alert(err.message)
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const formatDate = (d) => d ? new Date(d).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}) : '—'
 
   return (
     <CMSLayout
       title="Media Library"
-      subtitle={`${MEDIA_ITEMS.length} files · ${totalSize.toFixed(1)} MB shown`}
+      subtitle={loading ? 'Loading…' : `${total} files`}
       action={
-        <button className="btn-primary text-xs py-2">
-          <Upload size={13} /> Upload Files
-        </button>
+        <label className="btn-primary text-xs py-2 cursor-pointer">
+          <Upload size={13} /> {uploading ? 'Uploading…' : 'Upload Files'}
+          <input type="file" multiple accept="image/*,video/*,.pdf,.doc,.docx,.pptx" className="hidden" onChange={handleUpload} disabled={uploading} />
+        </label>
       }
     >
-      {/* Upload Zone */}
-      <div className="border-2 border-dashed border-gray-200 rounded-xl bg-white p-6 mb-5 text-center hover:border-ngc-blue transition-colors group cursor-pointer">
-        <Upload size={20} className="mx-auto text-gray-300 group-hover:text-ngc-blue mb-2 transition-colors" />
-        <p className="text-xs text-ngc-muted">Drag & drop files here or <span className="text-ngc-blue font-medium hover:underline">browse</span></p>
-        <p className="text-[10px] text-gray-400 mt-1">JPG, PNG, PDF, MP4, PPTX — Max 50 MB per file</p>
-      </div>
+      {/* Upload progress */}
+      {uploadProgress && (
+        <div className="mb-4 bg-blue-50 border border-blue-200 rounded-lg px-4 py-2.5 text-xs text-blue-700 font-medium flex items-center gap-2">
+          {uploading && <Loader2 size={12} className="animate-spin" />}
+          {uploadProgress}
+        </div>
+      )}
 
-      {/* Toolbar */}
+      {/* Drop zone */}
+      <label className="border-2 border-dashed border-gray-200 rounded-xl bg-white p-6 mb-5 text-center hover:border-ngc-blue transition-colors group cursor-pointer block">
+        <Upload size={20} className="mx-auto text-gray-300 group-hover:text-ngc-blue mb-2 transition-colors" />
+        <p className="text-xs text-ngc-muted">Drag & drop or <span className="text-ngc-blue font-medium">browse</span></p>
+        <p className="text-[10px] text-gray-400 mt-1">JPG, PNG, PDF, MP4 — Max 100 MB</p>
+        <input type="file" multiple accept="image/*,video/*,.pdf" className="hidden" onChange={handleUpload} disabled={uploading} />
+      </label>
+
+      {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3 mb-4 items-start sm:items-center justify-between">
         <div className="flex gap-2 flex-wrap">
-          {FOLDERS.map(f => (
-            <button key={f} onClick={() => setFolder(f)}
+          {['', 'photo', 'video', 'document'].map(t => (
+            <button key={t} onClick={() => setType(t)}
               className={`text-[11px] px-3 py-1.5 rounded-full font-medium border transition-colors
-                ${folder === f ? 'bg-ngc-blue text-white border-ngc-blue' : 'bg-white text-ngc-muted border-gray-200 hover:border-ngc-blue hover:text-ngc-blue'}`}>
-              {f}
+                ${typeFilter === t ? 'bg-ngc-blue text-white border-ngc-blue' : 'bg-white text-ngc-muted border-gray-200 hover:border-ngc-blue hover:text-ngc-blue'}`}>
+              {t === '' ? 'All Types' : t.charAt(0).toUpperCase() + t.slice(1) + 's'}
+            </button>
+          ))}
+          {categories.map(c => (
+            <button key={c} onClick={() => setCat(c === 'All' ? '' : c)}
+              className={`text-[11px] px-3 py-1.5 rounded-full font-medium border transition-colors
+                ${catFilter === (c === 'All' ? '' : c) ? 'bg-ngc-navy text-white border-ngc-navy' : 'bg-white text-ngc-muted border-gray-200 hover:border-ngc-blue hover:text-ngc-blue'}`}>
+              {c}
             </button>
           ))}
         </div>
@@ -85,47 +129,32 @@ export default function CMSMedia() {
               value={search} onChange={e => setSearch(e.target.value)} />
           </div>
           <div className="flex border border-gray-200 rounded overflow-hidden">
-            <button onClick={() => setView('grid')} className={`p-1.5 ${view === 'grid' ? 'bg-ngc-blue text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}>
-              <Grid size={14} />
-            </button>
-            <button onClick={() => setView('list')} className={`p-1.5 ${view === 'list' ? 'bg-ngc-blue text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}>
-              <List size={14} />
-            </button>
+            <button onClick={() => setView('grid')} className={`p-1.5 ${view==='grid'?'bg-ngc-blue text-white':'bg-white text-gray-500 hover:bg-gray-50'}`}><Grid size={14}/></button>
+            <button onClick={() => setView('list')} className={`p-1.5 ${view==='list'?'bg-ngc-blue text-white':'bg-white text-gray-500 hover:bg-gray-50'}`}><List size={14}/></button>
           </div>
         </div>
       </div>
 
-      {/* Bulk actions */}
-      {selected.length > 0 && (
-        <div className="bg-ngc-blue/5 border border-ngc-blue/20 rounded-lg px-4 py-2.5 mb-4 flex items-center gap-3">
-          <span className="text-xs text-ngc-blue font-medium">{selected.length} selected</span>
-          <button className="text-xs text-red-500 hover:text-red-700 flex items-center gap-1"><Trash2 size={11} /> Delete</button>
-          <button className="text-xs text-ngc-blue hover:text-ngc-navy flex items-center gap-1"><Download size={11} /> Download</button>
-          <button onClick={() => setSelected([])} className="text-xs text-ngc-muted ml-auto">Clear</button>
+      {error && (
+        <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-4 py-3 mb-4 text-red-600 text-xs">
+          <AlertCircle size={14}/> {error}
+          <button onClick={load} className="ml-auto flex items-center gap-1 hover:underline"><RefreshCw size={12}/> Retry</button>
         </div>
       )}
 
-      {/* Grid view */}
-      {view === 'grid' && (
+      {loading ? (
+        <div className="flex items-center justify-center py-16 gap-2 text-ngc-muted text-sm">
+          <Loader2 size={18} className="animate-spin text-ngc-blue"/> Loading media…
+        </div>
+      ) : view === 'grid' ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
-          {filtered.map(item => {
-            const { icon: TypeIcon, color, bg } = TYPE_ICONS[item.type] || TYPE_ICONS.doc
-            const isSelected = selected.includes(item.id)
+          {items.map(item => {
+            const { icon: TypeIcon, color, bg } = TYPE_ICONS[item.type] || TYPE_ICONS.other
             return (
-              <div key={item.id} onClick={() => toggleSelect(item.id)}
-                className={`bg-white rounded-lg border-2 transition-all cursor-pointer group overflow-hidden
-                  ${isSelected ? 'border-ngc-blue shadow-md' : 'border-gray-100 hover:border-gray-300'}`}>
-                {item.type === 'image' ? (
-                  <div className="h-24 flex items-center justify-center" style={{ background: item.thumb + '22' }}>
-                    <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: item.thumb + '44' }}>
-                      <Image size={18} style={{ color: item.thumb }} />
-                    </div>
-                  </div>
-                ) : item.type === 'video' ? (
-                  <div className="h-24 flex items-center justify-center" style={{ background: item.thumb + '22' }}>
-                    <div className="w-10 h-10 rounded-full flex items-center justify-center bg-black/20">
-                      <Film size={18} className="text-white" />
-                    </div>
+              <div key={item.id} className="bg-white rounded-lg border-2 border-gray-100 hover:border-gray-300 transition-all group overflow-hidden">
+                {item.thumbnail ? (
+                  <div className="h-24 bg-gray-100 overflow-hidden">
+                    <img src={item.thumbnail} alt={item.title} className="w-full h-full object-cover" onError={e => { e.target.style.display='none' }} />
                   </div>
                 ) : (
                   <div className={`h-24 flex items-center justify-center ${bg}`}>
@@ -133,49 +162,50 @@ export default function CMSMedia() {
                   </div>
                 )}
                 <div className="p-2">
-                  <p className="text-[10px] font-medium text-ngc-navy truncate">{item.name}</p>
-                  <p className="text-[9px] text-ngc-muted">{item.size}</p>
+                  <p className="text-[10px] font-medium text-ngc-navy truncate">{item.title}</p>
+                  <p className="text-[9px] text-ngc-muted">{item.size || item.type}</p>
+                  <div className="flex gap-1.5 mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button className="text-ngc-blue hover:text-ngc-navy" title="Preview"><Eye size={11}/></button>
+                    <button onClick={() => handleDelete(item.id)} className="text-red-400 hover:text-red-600" title="Delete"><Trash2 size={11}/></button>
+                  </div>
                 </div>
               </div>
             )
           })}
+          {items.length === 0 && <p className="col-span-full text-center text-ngc-muted text-xs py-10">No media found.</p>}
         </div>
-      )}
-
-      {/* List view */}
-      {view === 'list' && (
+      ) : (
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
           <table className="w-full">
             <thead>
               <tr className="text-left text-[11px] text-ngc-muted uppercase tracking-wider border-b border-gray-100 bg-gray-50/60">
                 <th className="px-5 py-3 font-medium">File</th>
-                <th className="px-4 py-3 font-medium hidden sm:table-cell">Folder</th>
+                <th className="px-4 py-3 font-medium hidden sm:table-cell">Category</th>
                 <th className="px-4 py-3 font-medium hidden md:table-cell">Size</th>
-                <th className="px-4 py-3 font-medium hidden lg:table-cell">Dimensions</th>
-                <th className="px-4 py-3 font-medium hidden md:table-cell">Date</th>
+                <th className="px-4 py-3 font-medium hidden md:table-cell">Uploaded</th>
                 <th className="px-4 py-3 font-medium">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {filtered.map(item => {
-                const { icon: TypeIcon, color } = TYPE_ICONS[item.type] || TYPE_ICONS.doc
+              {items.length === 0 && <tr><td colSpan={5} className="px-5 py-10 text-center text-ngc-muted text-xs">No media found.</td></tr>}
+              {items.map(item => {
+                const { icon: TypeIcon, color } = TYPE_ICONS[item.type] || TYPE_ICONS.other
                 return (
-                  <tr key={item.id} className="hover:bg-gray-50/50 transition-colors group">
+                  <tr key={item.id} className="hover:bg-gray-50/50 group">
                     <td className="px-5 py-3 flex items-center gap-2.5">
-                      <TypeIcon size={14} className={color} />
-                      <span className="text-xs font-medium text-ngc-navy truncate max-w-[180px]">{item.name}</span>
+                      <TypeIcon size={14} className={color}/>
+                      <span className="text-xs font-medium text-ngc-navy truncate max-w-[180px]">{item.title}</span>
                     </td>
                     <td className="px-4 py-3 hidden sm:table-cell">
-                      <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{item.folder}</span>
+                      <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{item.category}</span>
                     </td>
-                    <td className="px-4 py-3 text-xs text-ngc-muted hidden md:table-cell">{item.size}</td>
-                    <td className="px-4 py-3 text-xs text-ngc-muted hidden lg:table-cell">{item.dims}</td>
-                    <td className="px-4 py-3 text-xs text-ngc-muted hidden md:table-cell">{item.date}</td>
+                    <td className="px-4 py-3 text-xs text-ngc-muted hidden md:table-cell">{item.size || '—'}</td>
+                    <td className="px-4 py-3 text-xs text-ngc-muted hidden md:table-cell">{formatDate(item.uploadedAt)}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2 opacity-60 group-hover:opacity-100">
-                        <button className="text-ngc-blue hover:text-ngc-navy" title="Preview"><Eye size={13} /></button>
-                        <button className="text-ngc-blue hover:text-ngc-navy" title="Download"><Download size={13} /></button>
-                        <button className="text-red-400 hover:text-red-600" title="Delete"><Trash2 size={13} /></button>
+                        <button className="text-ngc-blue hover:text-ngc-navy" title="Preview"><Eye size={13}/></button>
+                        <a href={item.url} download className="text-ngc-blue hover:text-ngc-navy" title="Download"><Download size={13}/></a>
+                        <button onClick={() => handleDelete(item.id)} className="text-red-400 hover:text-red-600" title="Delete"><Trash2 size={13}/></button>
                       </div>
                     </td>
                   </tr>

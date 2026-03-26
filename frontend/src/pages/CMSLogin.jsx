@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Eye, EyeOff, Shield, Lock, User, ArrowRight, AlertCircle } from 'lucide-react'
+import { Eye, EyeOff, Shield, Lock, User, ArrowRight, AlertCircle, Loader2 } from 'lucide-react'
+import { authAPI, setTokens, setUser } from '../utils/api'
 
 export default function CMSLogin() {
-  const [step, setStep]       = useState('login') // login | mfa
+  const [step, setStep]       = useState('login')
   const [form, setForm]       = useState({ username: '', password: '' })
   const [mfaCode, setMfaCode] = useState('')
   const [showPw, setShowPw]   = useState(false)
@@ -16,20 +17,10 @@ export default function CMSLogin() {
     setError('')
     setLoading(true)
     try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
-      })
-      if (res.ok) {
-        setStep('mfa')
-      } else {
-        const data = await res.json()
-        setError(data.message || 'Invalid credentials. Please try again.')
-      }
-    } catch {
-      // Demo: go to MFA step
-      setStep('mfa')
+      const data = await authAPI.login(form.username, form.password)
+      if (data.success && data.requiresMFA) setStep('mfa')
+    } catch (err) {
+      setError(err.message || 'Invalid credentials. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -40,19 +31,14 @@ export default function CMSLogin() {
     setError('')
     setLoading(true)
     try {
-      const res = await fetch('/api/auth/verify-mfa', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, token: mfaCode }),
-      })
-      if (res.ok) {
+      const data = await authAPI.verifyMFA(form.username, form.password, mfaCode)
+      if (data.success) {
+        setTokens(data.accessToken, data.refreshToken)
+        setUser(data.user)
         navigate('/cms/dashboard')
-      } else {
-        setError('Invalid MFA code. Please try again.')
       }
-    } catch {
-      // Demo: navigate to dashboard
-      navigate('/cms/dashboard')
+    } catch (err) {
+      setError(err.message || 'Invalid MFA code. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -60,16 +46,9 @@ export default function CMSLogin() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-ngc-navy via-ngc-navy-mid to-ngc-blue flex items-center justify-center px-4">
-      {/* Background grid */}
-      <div className="absolute inset-0 opacity-5" style={{
-        backgroundImage: 'linear-gradient(rgba(255,255,255,0.1) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.1) 1px,transparent 1px)',
-        backgroundSize: '50px 50px'
-      }} />
-
+      <div className="absolute inset-0 opacity-5" style={{backgroundImage:'linear-gradient(rgba(255,255,255,0.1) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.1) 1px,transparent 1px)',backgroundSize:'50px 50px'}} />
       <div className="relative w-full max-w-md">
-        {/* Card */}
         <div className="bg-white rounded-2xl shadow-2xl overflow-hidden">
-          {/* Header */}
           <div className="bg-ngc-navy px-8 py-6 text-center border-b-4 border-ngc-gold">
             <Link to="/" className="inline-flex items-center gap-3 mb-4">
               <div className="w-10 h-10 bg-white/10 rounded flex items-center justify-center">
@@ -91,26 +70,21 @@ export default function CMSLogin() {
           </div>
 
           <div className="px-8 py-8">
-            {/* Step indicator */}
             <div className="flex items-center gap-3 mb-7">
-              <div className={`flex items-center gap-2 text-xs font-medium ${step === 'login' ? 'text-ngc-blue' : 'text-green-600'}`}>
-                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-white text-xs ${step === 'login' ? 'bg-ngc-blue' : 'bg-green-500'}`}>
-                  {step === 'mfa' ? '✓' : '1'}
-                </div>
+              <div className={`flex items-center gap-2 text-xs font-medium ${step==='login'?'text-ngc-blue':'text-green-600'}`}>
+                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-white text-xs ${step==='login'?'bg-ngc-blue':'bg-green-500'}`}>{step==='mfa'?'✓':'1'}</div>
                 Credentials
               </div>
               <div className="flex-1 h-px bg-gray-200" />
-              <div className={`flex items-center gap-2 text-xs font-medium ${step === 'mfa' ? 'text-ngc-blue' : 'text-gray-400'}`}>
-                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-white text-xs ${step === 'mfa' ? 'bg-ngc-blue' : 'bg-gray-200 !text-gray-500'}`}>
-                  2
-                </div>
+              <div className={`flex items-center gap-2 text-xs font-medium ${step==='mfa'?'text-ngc-blue':'text-gray-400'}`}>
+                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${step==='mfa'?'bg-ngc-blue text-white':'bg-gray-200 text-gray-500'}`}>2</div>
                 MFA Verification
               </div>
             </div>
 
             {error && (
               <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded px-3 py-2.5 mb-5 text-red-600 text-sm">
-                <AlertCircle size={14} /> {error}
+                <AlertCircle size={14}/> {error}
               </div>
             )}
 
@@ -120,15 +94,9 @@ export default function CMSLogin() {
                   <label className="block text-xs font-medium text-gray-700 mb-1.5">Username / Employee ID</label>
                   <div className="relative">
                     <User size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                    <input
-                      type="text"
-                      value={form.username}
-                      onChange={e => setForm(f => ({ ...f, username: e.target.value }))}
-                      required
-                      className="input-field pl-9"
-                      placeholder="Enter your username"
-                      autoComplete="username"
-                    />
+                    <input type="text" value={form.username} required autoComplete="username"
+                      onChange={e=>setForm(f=>({...f,username:e.target.value}))}
+                      className="input-field pl-9" placeholder="Enter your username" />
                   </div>
                 </div>
                 <div>
@@ -138,36 +106,16 @@ export default function CMSLogin() {
                   </div>
                   <div className="relative">
                     <Lock size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                    <input
-                      type={showPw ? 'text' : 'password'}
-                      value={form.password}
-                      onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
-                      required
-                      className="input-field pl-9 pr-10"
-                      placeholder="Enter your password"
-                      autoComplete="current-password"
-                    />
-                    <button type="button" onClick={() => setShowPw(s => !s)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700">
-                      {showPw ? <EyeOff size={15} /> : <Eye size={15} />}
+                    <input type={showPw?'text':'password'} value={form.password} required autoComplete="current-password"
+                      onChange={e=>setForm(f=>({...f,password:e.target.value}))}
+                      className="input-field pl-9 pr-10" placeholder="Enter your password" />
+                    <button type="button" onClick={()=>setShowPw(s=>!s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700">
+                      {showPw?<EyeOff size={15}/>:<Eye size={15}/>}
                     </button>
                   </div>
                 </div>
-
-                {/* Puzzle CAPTCHA placeholder */}
-                <div className="border border-gray-200 rounded p-3 bg-gray-50 flex items-center gap-3">
-                  <div className="w-8 h-8 bg-ngc-blue/10 rounded flex items-center justify-center">
-                    <Shield size={16} className="text-ngc-blue" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-xs font-medium text-gray-700">Sliding Puzzle CAPTCHA</p>
-                    <p className="text-[10px] text-gray-500">Complete verification to continue</p>
-                  </div>
-                  <span className="text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">✓ Verified</span>
-                </div>
-
                 <button type="submit" disabled={loading} className="btn-primary w-full justify-center disabled:opacity-60">
-                  {loading ? 'Signing In...' : <>Continue <ArrowRight size={14} /></>}
+                  {loading?<><Loader2 size={14} className="animate-spin"/>Signing In…</>:<>Continue <ArrowRight size={14}/></>}
                 </button>
               </form>
             ) : (
@@ -177,40 +125,27 @@ export default function CMSLogin() {
                     <Shield size={26} className="text-ngc-blue" />
                   </div>
                   <p className="text-sm font-medium text-gray-800">Two-Factor Authentication</p>
-                  <p className="text-xs text-ngc-muted mt-1">Open your Google/Microsoft Authenticator and enter the 6-digit code for <strong>NGC Staff Portal</strong>.</p>
+                  <p className="text-xs text-ngc-muted mt-1">Enter the 6-digit code from your Authenticator app for <strong>NGC Staff Portal</strong>.</p>
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1.5 text-center">Authentication Code</label>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    pattern="[0-9]{6}"
-                    maxLength={6}
-                    value={mfaCode}
-                    onChange={e => setMfaCode(e.target.value.replace(/\D/g,''))}
-                    required
-                    className="input-field text-center text-2xl tracking-[0.5em] font-mono"
-                    placeholder="000000"
-                    autoComplete="one-time-code"
-                  />
+                  <input type="text" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} autoComplete="one-time-code"
+                    value={mfaCode} onChange={e=>setMfaCode(e.target.value.replace(/\D/g,''))} required
+                    className="input-field text-center text-2xl tracking-[0.5em] font-mono" placeholder="000000" />
                 </div>
-                <button type="submit" disabled={loading || mfaCode.length < 6} className="btn-primary w-full justify-center disabled:opacity-60">
-                  {loading ? 'Verifying...' : <>Verify & Login <ArrowRight size={14}/></>}
+                <button type="submit" disabled={loading||mfaCode.length<6} className="btn-primary w-full justify-center disabled:opacity-60">
+                  {loading?<><Loader2 size={14} className="animate-spin"/>Verifying…</>:<>Verify & Login <ArrowRight size={14}/></>}
                 </button>
-                <button type="button" onClick={() => setStep('login')} className="w-full text-center text-xs text-ngc-muted hover:text-ngc-blue transition-colors">
+                <button type="button" onClick={()=>{setStep('login');setError('')}} className="w-full text-center text-xs text-ngc-muted hover:text-ngc-blue transition-colors">
                   ← Back to credentials
                 </button>
               </form>
             )}
           </div>
-
           <div className="px-8 pb-6 text-center">
-            <p className="text-[10px] text-gray-400">
-              This portal is restricted to authorised NGC personnel only. Unauthorised access is a punishable offence.
-            </p>
+            <p className="text-[10px] text-gray-400">This portal is restricted to authorised NGC personnel only.</p>
           </div>
         </div>
-
         <div className="text-center mt-4">
           <Link to="/" className="text-white/60 text-xs hover:text-white/90 transition-colors">← Return to NGC Website</Link>
         </div>
